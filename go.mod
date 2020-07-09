@@ -1,4 +1,4 @@
-module github.com/leenattress/shootygame
+module github.com/leenattress/goshootygame
 
 go 1.14
 
