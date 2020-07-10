@@ -107,6 +107,7 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 }
 
 /** PATHS */
@@ -129,7 +130,7 @@ type Game struct {
 	bullets        Bullets
 	paths          []Path
 	score          int
-	stars          Stars
+	particles      Particles
 }
 
 type Hitbox struct {
@@ -169,33 +170,65 @@ type Bullets struct {
 
 /** /BULLETS */
 
-/** STARS */
-type Star struct {
-	x     float64
-	y     float64
-	speed float64
+/** PARTICLES */
+type Particle struct {
+	x            float64
+	y            float64
+	vx           float64
+	vy           float64
+	size         float64
+	sizev        float64
+	speed        float64
+	speedv       float64
+	particleType int
+	col1         ebiten.ColorM
+	col2         ebiten.ColorM
+	col3         ebiten.ColorM
+	life         int
+	toDelete     bool
+	t            int
+	forever      bool
 }
 
-type Stars struct {
-	stars []*Star
-	num   int
+type Particles struct {
+	particles []*Particle
+	num       int
 }
 
-func (s *Stars) Update() {
-	for i := 0; i < len(s.stars); i++ {
-		s.stars[i].Update()
+func (s *Particles) Update() {
+	for i := 0; i < len(s.particles); i++ {
+		s.particles[i].Update()
 	}
 }
 
-func (s *Star) Update() {
-	s.y += s.speed // always downwards
+func (s *Particle) Update() {
 
-	if s.y > screenHeight {
-		s.y = -64
-	} // wrap around to top
+	s.x += s.vx
+	s.y += s.vy
+	s.speed += s.speedv
+	s.size += s.sizev
+	if !s.forever {
+		s.life -= 1
+		if s.life < 0 {
+			s.toDelete = true
+		}
+	}
+
+	// if s.life != -1 {
+	// 	s.life -= 1 // life ebbs away for this particle
+	// }
+
+	// special behaviour for falling stars, they wrap back to the top once they reach the bottom
+	if s.particleType == 0 {
+		if s.y > screenHeight {
+			s.y = -64
+		} // wrap around to top
+	}
+
+	s.t += 1 // time ticks on
 }
 
-/** /STARS */
+/** /PARTICLES */
 
 /** Actors (enemies) */
 type Actor struct {
@@ -271,12 +304,13 @@ func (g *Game) init() {
 	g.player.hitbox.w = 8
 	g.player.hitbox.h = 8
 
-	// create some stars
+	// create some star particles
 	for i := 0; i < 50; i++ {
-		g.stars.stars = append(g.stars.stars, &Star{
-			x:     float64(rand.Intn(screenWidth)),
-			y:     float64(rand.Intn(screenHeight)),
-			speed: float64(rand.Intn(10) + 1),
+		g.particles.particles = append(g.particles.particles, &Particle{
+			x:       float64(rand.Intn(screenWidth)),
+			y:       float64(rand.Intn(screenHeight)),
+			vy:      float64(rand.Intn(10) + 1),
+			forever: true,
 		})
 	}
 
@@ -286,14 +320,14 @@ func (g *Game) init() {
 			g.actors.actors = append(g.actors.actors, &Actor{
 				imageWidth:  32,
 				imageHeight: 32,
-				x:           float64(24 + (i * 36)),
+				x:           float64(24 + (i * 36)), // all these ssquares make a circle
 				y:           float64(58 + (j * 36)),
 				vx:          0,
 				vy:          0,
 				angle:       0,
 				enemyType:   1,
 				toDelete:    false,
-				t:           (i + j) * 3,
+				t:           (i + j) * 3, // by starting the timer offset like this we get a pleasant wiggly formation
 				hitbox: Hitbox{
 					x: 4,
 					y: 4,
@@ -310,15 +344,6 @@ func bulletExists(arr []*Bullet, index int) bool {
 	return (len(arr) > index)
 }
 
-// func hitBox( source, target ) {
-// 	/* Source and target objects contain x, y and width, height */
-// 	return !(
-// 		( ( source.y + source.height ) < ( target.y ) ) ||
-// 		( source.y > ( target.y + target.height ) ) ||
-// 		( ( source.x + source.width ) < target.x ) ||
-// 		( source.x > ( target.x + target.width ) )
-// 	);
-// }
 func collide(x1 float64, y1 float64, w1 float64, h1 float64, x2 float64, y2 float64, w2 float64, h2 float64) bool {
 	// Check x and y for overlap
 	if x2 > w1+x1 || x1 > w2+x2 || y2 > h1+y1 || y1 > h2+y2 {
@@ -326,21 +351,6 @@ func collide(x1 float64, y1 float64, w1 float64, h1 float64, x2 float64, y2 floa
 	}
 	return true
 }
-
-// func collide(ax1 float64, ay1 float64, ax2 float64, ay2 float64, bx1 float64, by1 float64, bx2 float64, by2 float64) bool {
-// 	var c1 = (ay1 >= by2)
-// 	var c2 = (ay2 <= by1)
-// 	var c3 = (ax1 <= bx2)
-// 	var c4 = (ax2 >= bx1)
-
-// 	if c1 && c2 && c3 && c4 {
-// 		log.Printf("%t %t %t %t", c1, c2, c3, c4)
-
-// 		return true
-// 	} else {
-// 		return false
-// 	}
-// }
 
 /** GAME MAIN UPDATE */
 func (g *Game) Update(screen *ebiten.Image) error {
@@ -470,6 +480,31 @@ func (g *Game) Update(screen *ebiten.Image) error {
 				g.bullets.bullets[i].toDelete = true
 				g.actors.actors[j].toDelete = true
 				g.score += 1
+
+				// big shite flash
+				g.particles.particles = append(g.particles.particles, &Particle{
+					x:            b.x,
+					y:            b.y,
+					vx:           0,
+					vy:           0,
+					size:         100,
+					sizev:        -10,
+					particleType: 2,
+					life:         6,
+				})
+				// smaller fireballs
+				for i := 0; i < 8; i++ {
+					g.particles.particles = append(g.particles.particles, &Particle{
+						x:            b.x,
+						y:            b.y,
+						vx:           float64(4 - rand.Intn(8)),
+						vy:           float64(4 - rand.Intn(8)),
+						size:         float64(rand.Intn(30) + 20),
+						sizev:        -3,
+						particleType: 1,
+						life:         10,
+					})
+				}
 			}
 		}
 
@@ -500,32 +535,21 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	}
 	g.actors.actors = tempActors
 
-	g.stars.Update()
+	var tempParticles = make([]*Particle, 0)
+	for _, x := range g.particles.particles {
+		if !x.toDelete {
+			tempParticles = append(tempParticles, x)
+		}
+	}
+	g.particles.particles = tempParticles
+
+	g.particles.Update()
 
 	return nil
 }
 
 /** GAME MAIN DRAW */
 func (g *Game) Draw(screen *ebiten.Image) {
-
-	// stars are in the background
-	for i := 0; i < len(g.stars.stars); i++ {
-		s := g.stars.stars[i]
-		var scale float64 = s.speed / 9
-		g.op.GeoM.Reset()
-		g.op.GeoM.Scale(1, float64(scale))
-		// g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
-		// g.op.GeoM.Translate(float64(w)/2, float64(h)/2)
-		g.op.GeoM.Translate(float64(s.x), float64(s.y))
-		g.op.ColorM.Translate(0, 0, 0, -(-scale + 1))
-		if s.speed > 5 {
-			screen.DrawImage(starFastImg, &g.op)
-		} else {
-			screen.DrawImage(starSlowImg, &g.op)
-		}
-		g.op.ColorM.Reset()
-
-	}
 
 	// Draw the current gamepad statua.
 	str := ""
@@ -637,6 +661,53 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// 		}
 	// 	}
 	// }
+
+	for i := 0; i < len(g.particles.particles); i++ {
+		s := g.particles.particles[i]
+		if s.particleType == 0 {
+			var scale float64 = s.vy / 9
+			g.op.GeoM.Reset()
+			g.op.GeoM.Scale(1, float64(scale))
+			// g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
+			// g.op.GeoM.Translate(float64(w)/2, float64(h)/2)
+			g.op.GeoM.Translate(float64(s.x), float64(s.y))
+			g.op.ColorM.Translate(0, 0, 0, -(-scale + 1))
+			if s.vy > 5 {
+				screen.DrawImage(starFastImg, &g.op)
+			} else {
+				screen.DrawImage(starSlowImg, &g.op)
+			}
+			g.op.ColorM.Reset()
+		}
+
+		// fireballs
+		if s.particleType == 1 {
+			var scale float64 = s.size / 100 // between 0 and 1
+			var w, _ = circleWhite.Size()
+			var nudge float64 = float64(w) * scale
+
+			g.op.GeoM.Reset()
+			g.op.GeoM.Scale(s.size/100, s.size/100)
+			g.op.GeoM.Translate(float64(s.x-(nudge/2)), float64(s.y-(nudge/2)))
+
+			g.op.ColorM.Translate(2, -scale*2, -1, 0)
+			screen.DrawImage(circleWhite, &g.op)
+			g.op.ColorM.Reset()
+		}
+		// big white circle
+		if s.particleType == 2 {
+			var scale float64 = s.size / 100 // between 0 and 1
+			var w, _ = circleWhite.Size()
+			var nudge float64 = float64(w) * scale
+
+			g.op.GeoM.Reset()
+			g.op.GeoM.Scale(scale, scale)
+			g.op.GeoM.Translate(float64(s.x-(nudge/2)), float64(s.y-(nudge/2)))
+			screen.DrawImage(circleWhite, &g.op)
+			g.op.ColorM.Reset()
+		}
+
+	}
 
 }
 
