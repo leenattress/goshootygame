@@ -29,7 +29,7 @@ Tasks - Galaga Clone
 [ ] - enemy ships can hit player, and lose a life
 [ ] - enemy ships can shoot downwards
 [ ] - enemy bullets can hit player, and lose a life
-[ ] - explosions on all things that need it
+[x] - explosions on all things that need it
 [ ] - scoring
 [ ] - fabulous ui
 [ ] - title screen
@@ -43,7 +43,7 @@ Tasks - Galaga Clone
 [ ] - sound effects for enemy die
 [ ] - sound effects for player die
 [ ] - screen shake
-[ ] - particles
+[x] - particles
 
 */
 
@@ -63,6 +63,7 @@ var (
 	enemy2      *ebiten.Image
 	enemy3      *ebiten.Image
 	circleWhite *ebiten.Image
+	playerLife  *ebiten.Image
 )
 
 func init() {
@@ -108,6 +109,11 @@ func init() {
 		log.Fatal(err)
 	}
 
+	playerLife, _, err = ebitenutil.NewImageFromFile("assets/lives.png", ebiten.FilterDefault)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
 
 /** PATHS */
@@ -149,6 +155,7 @@ type Player struct {
 	fireRate    int16
 	maxFireRate int16
 	hitbox      Hitbox
+	lives       int
 }
 
 /** BULLETS */
@@ -303,6 +310,7 @@ func (g *Game) init() {
 	g.player.hitbox.y = 8
 	g.player.hitbox.w = 8
 	g.player.hitbox.h = 8
+	g.player.lives = 3
 
 	// create some star particles
 	for i := 0; i < 50; i++ {
@@ -668,8 +676,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			var scale float64 = s.vy / 9
 			g.op.GeoM.Reset()
 			g.op.GeoM.Scale(1, float64(scale))
-			// g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
-			// g.op.GeoM.Translate(float64(w)/2, float64(h)/2)
 			g.op.GeoM.Translate(float64(s.x), float64(s.y))
 			g.op.ColorM.Translate(0, 0, 0, -(-scale + 1))
 			if s.vy > 5 {
@@ -706,7 +712,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			screen.DrawImage(circleWhite, &g.op)
 			g.op.ColorM.Reset()
 		}
+	}
 
+	for i := 0; i < g.player.lives; i++ {
+		g.op.GeoM.Reset()
+		g.op.GeoM.Translate(float64(16+(i*18)), float64(screenHeight-20))
+		screen.DrawImage(playerLife, &g.op)
 	}
 
 }
