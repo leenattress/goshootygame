@@ -125,6 +125,13 @@ type Path struct {
 	vertices []Vertex
 }
 
+type Controls struct {
+	up    bool
+	down  bool
+	left  bool
+	right bool
+	fire  bool
+}
 type Game struct {
 	gamepadIDs     map[int]struct{}
 	axes           map[int][]string
@@ -137,6 +144,8 @@ type Game struct {
 	paths          []Path
 	score          int
 	particles      Particles
+	difficulty     int
+	controls       Controls
 }
 
 type Hitbox struct {
@@ -305,7 +314,7 @@ func (g *Game) init() {
 	g.player.speed = 2
 	g.player.maxSpeed = 4
 	g.player.fireRate = 0
-	g.player.maxFireRate = 4
+	g.player.maxFireRate = 8
 	g.player.hitbox.x = 8
 	g.player.hitbox.y = 8
 	g.player.hitbox.w = 8
@@ -320,30 +329,6 @@ func (g *Game) init() {
 			vy:      float64(rand.Intn(10) + 1),
 			forever: true,
 		})
-	}
-
-	// create some baddies
-	for i := 0; i < 5; i++ {
-		for j := 0; j < 3; j++ {
-			g.actors.actors = append(g.actors.actors, &Actor{
-				imageWidth:  32,
-				imageHeight: 32,
-				x:           float64(24 + (i * 36)), // all these ssquares make a circle
-				y:           float64(58 + (j * 36)),
-				vx:          0,
-				vy:          0,
-				angle:       0,
-				enemyType:   1,
-				toDelete:    false,
-				t:           (i + j) * 3, // by starting the timer offset like this we get a pleasant wiggly formation
-				hitbox: Hitbox{
-					x: 4,
-					y: 4,
-					w: 24,
-					h: 24,
-				},
-			})
-		}
 	}
 
 }
@@ -365,6 +350,36 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	if !g.inited {
 		g.init()
 	}
+
+	g.player.vx = 0
+	g.player.vy = 0
+	g.controls.right = false
+	g.controls.left = false
+	g.controls.down = false
+	g.controls.up = false
+	g.controls.fire = false
+
+	// When the "up arrow key" is pressed..
+	if ebiten.IsKeyPressed(ebiten.KeyUp) {
+		g.controls.up = true
+	}
+	// When the "down arrow key" is pressed..
+	if ebiten.IsKeyPressed(ebiten.KeyDown) {
+		g.controls.down = true
+	}
+	// When the "left arrow key" is pressed..
+	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+		g.controls.left = true
+	}
+	// When the "right arrow key" is pressed..
+	if ebiten.IsKeyPressed(ebiten.KeyRight) {
+		g.controls.right = true
+	}
+	// When the "space" is pressed..
+	if ebiten.IsKeyPressed(ebiten.KeySpace) {
+		g.controls.fire = true
+	}
+
 	if g.gamepadIDs == nil {
 		g.gamepadIDs = map[int]struct{}{}
 	}
@@ -387,25 +402,77 @@ func (g *Game) Update(screen *ebiten.Image) error {
 
 		maxAxis := ebiten.GamepadAxisNum(id)
 
-		g.player.vx = 0
-		g.player.vy = 0
-
 		v := ebiten.GamepadAxis(id, 0)
 		h := ebiten.GamepadAxis(id, 1)
 		if v == 1.0 {
-			g.player.vx = g.player.speed
+			g.controls.right = true
 		}
 		if v == -1.0 {
-			g.player.vx = -g.player.speed
+			g.controls.left = true
 		}
 		if h == 1.0 {
-			g.player.vy = g.player.speed
+			g.controls.down = true
 		}
 		if h == -1.0 {
-			g.player.vy = -g.player.speed
+			g.controls.up = true
 		}
 
-		//act on velocity
+		for a := 0; a < maxAxis; a++ {
+			v := ebiten.GamepadAxis(id, a)
+			g.axes[id] = append(g.axes[id], fmt.Sprintf("%d:%0.2f", a, v))
+		}
+		maxButton := ebiten.GamepadButton(ebiten.GamepadButtonNum(id))
+		for b := ebiten.GamepadButton(id); b < maxButton; b++ {
+			if ebiten.IsGamepadButtonPressed(id, b) {
+				g.pressedButtons[id] = append(g.pressedButtons[id], strconv.Itoa(int(b)))
+			}
+
+			// Log button eventa.
+			if inpututil.IsGamepadButtonJustPressed(id, b) {
+				g.controls.fire = true
+
+				//log.Printf("button pressed: id: %d, button: %d", id, b)
+			}
+			if inpututil.IsGamepadButtonJustReleased(id, b) {
+				//log.Printf("button released: id: %d, button: %d", id, b)
+			}
+		}
+
+		if g.controls.right {
+			g.player.vx = g.player.speed
+		}
+		if g.controls.left {
+			g.player.vx = -g.player.speed
+		}
+		if g.controls.down {
+			g.player.vy = g.player.speed
+		}
+		if g.controls.up {
+			g.player.vy = -g.player.speed
+		}
+		if g.controls.fire {
+			if g.player.fireRate == 0 {
+				g.player.fireRate = g.player.maxFireRate
+				g.bullets.bullets = append(g.bullets.bullets, &Bullet{
+					imageWidth:  8,
+					imageHeight: 8,
+					x:           g.player.x + 12, // bullet spawn at nose
+					y:           g.player.y + 4,
+					vx:          0,
+					vy:          -6,
+					angle:       0,
+					hitbox: Hitbox{
+						x: 0,
+						y: 0,
+						w: 8,
+						h: 8,
+					},
+				})
+				g.bullets.num = len(g.bullets.bullets)
+			}
+		}
+
+		//act on movement for player
 		g.player.x += g.player.vx
 		g.player.y += g.player.vy
 
@@ -426,46 +493,6 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		// limit fire rate
 		if g.player.fireRate > 0 {
 			g.player.fireRate -= 1
-		}
-
-		for a := 0; a < maxAxis; a++ {
-			v := ebiten.GamepadAxis(id, a)
-			g.axes[id] = append(g.axes[id], fmt.Sprintf("%d:%0.2f", a, v))
-		}
-		maxButton := ebiten.GamepadButton(ebiten.GamepadButtonNum(id))
-		for b := ebiten.GamepadButton(id); b < maxButton; b++ {
-			if ebiten.IsGamepadButtonPressed(id, b) {
-				g.pressedButtons[id] = append(g.pressedButtons[id], strconv.Itoa(int(b)))
-			}
-
-			// Log button eventa.
-			if inpututil.IsGamepadButtonJustPressed(id, b) {
-
-				if g.player.fireRate == 0 {
-					g.player.fireRate = g.player.maxFireRate
-					g.bullets.bullets = append(g.bullets.bullets, &Bullet{
-						imageWidth:  8,
-						imageHeight: 8,
-						x:           g.player.x + 12, // bullet spawn at nose
-						y:           g.player.y + 4,
-						vx:          0,
-						vy:          -6,
-						angle:       0,
-						hitbox: Hitbox{
-							x: 0,
-							y: 0,
-							w: 8,
-							h: 8,
-						},
-					})
-					g.bullets.num = len(g.bullets.bullets)
-				}
-
-				//log.Printf("button pressed: id: %d, button: %d", id, b)
-			}
-			if inpututil.IsGamepadButtonJustReleased(id, b) {
-				//log.Printf("button released: id: %d, button: %d", id, b)
-			}
 		}
 	}
 	g.actors.Update()
@@ -516,15 +543,40 @@ func (g *Game) Update(screen *ebiten.Image) error {
 			}
 		}
 
-		//if bulletExists(g.bullets.bullets, i) {
-		//for i := 0; i < g.bullets.num; i++ {
 		g.bullets.bullets[i].x += g.bullets.bullets[i].vx
 		g.bullets.bullets[i].y += g.bullets.bullets[i].vy
 
 		if g.bullets.bullets[i].y < 0 {
 			g.bullets.bullets[i].toDelete = true
 		}
-		//}
+
+		if len(g.actors.actors) == 0 {
+			// create some baddies
+			var thisWave int = rand.Intn(3)
+			for i := 0; i < 5; i++ {
+				for j := 0; j < 4; j++ {
+					g.actors.actors = append(g.actors.actors, &Actor{
+						imageWidth:  32,
+						imageHeight: 32,
+						x:           float64(12 + (i * 40)), // all these ssquares make a circle
+						y:           float64(58 + (j * 32)),
+						vx:          0,
+						vy:          0,
+						angle:       0,
+						enemyType:   thisWave,
+						toDelete:    false,
+						t:           (i + j) * 3, // by starting the timer offset like this we get a pleasant wiggly formation
+						hitbox: Hitbox{
+							x: 4,
+							y: 4,
+							w: 24,
+							h: 24,
+						},
+					})
+				}
+			}
+			g.difficulty += 1
+		}
 	}
 
 	var tempBullets = make([]*Bullet, 0)
@@ -719,7 +771,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.op.GeoM.Translate(float64(16+(i*18)), float64(screenHeight-20))
 		screen.DrawImage(playerLife, &g.op)
 	}
-
+	ebitenutil.DebugPrint(screen, fmt.Sprintf("SCORE: %d  -  WAVE: %d ", g.score*1000, g.difficulty))
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
