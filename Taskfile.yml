@@ -4,13 +4,16 @@ tasks:
 
   run:
     cmds:
-      - go run src/main.go
+      - go run src/*.go
 
   build:
     cmds:
       - go run tools/assets.go
-      - go get -u github.com/go-bindata/go-bindata/...
-      - env GOOS=windows GOARCH=amd64 go build -o build/shooty.exe -v -i src/main.go
+      #- file2byteslice -input assets/atlas-1.xml -output src/atlas.go -package atlasxml -var packagexml
+      #- file2byteslice -input assets/atlas-1.png -output src/images.go -package atlaspng -var packagepng
+      - env GOOS=windows GOARCH=amd64 go build -o build/shooty.exe -v -i src/*.go
+      #- env GOOS=linux GOARCH=amd64 go build -o build/shooty -v -i src/*.go
+
 
   assets:
     cmds:

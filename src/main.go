@@ -7,7 +7,6 @@ import (
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
 	"github.com/hajimehoshi/ebiten/inpututil"
-	"github.com/leenattress/goshootygame/bindata"
 	"image"
 	"image/color"
 	_ "image/png"
@@ -100,16 +99,6 @@ var (
 )
 
 func init() {
-
-	dataImage, err := Asset("assets/atlas-1.png")
-	if err != nil {
-		// Asset was not found.
-	}
-	spriteAtlas, _, err := image.Decode(bytes.NewReader(dataImage))
-	//spriteAtlas, _, err = ebitenutil.NewImageFromFile("assets/atlas-1.png", ebiten.FilterDefault)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 }
 
@@ -309,13 +298,15 @@ func (g *Game) init() {
 		g.inited = true
 	}()
 
-	dataXML, err := Asset("assets/atlas-1.xml")
+	img, _, err := image.Decode(bytes.NewReader(packagepng))
+	spriteAtlas, _ = ebiten.NewImageFromImage(img, ebiten.FilterDefault)
+
 	if err != nil {
-		// Asset was not found.
+		log.Fatal(err)
 	}
 
 	// prepare the sprite atlas in memory
-	buf := bytes.NewBuffer(dataXML)
+	buf := bytes.NewBuffer(packagexml)
 	dec := xml.NewDecoder(buf)
 
 	var n Node
@@ -794,9 +785,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			g.op.GeoM.Translate(float64(s.x), float64(s.y))
 			g.op.ColorM.Translate(0, 0, 0, -(-scale + 1))
 			if s.vy > 5 {
-				spriteDraw(screen, g, "starSlow")
-			} else {
 				spriteDraw(screen, g, "starFast")
+			} else {
+				spriteDraw(screen, g, "starSlow")
 			}
 			g.op.ColorM.Reset()
 		}
