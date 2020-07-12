@@ -67,41 +67,6 @@ func init() {
 
 }
 
-// Node is an XML node
-type Node struct {
-	XMLName xml.Name
-	Attrs   []xml.Attr `xml:"-"`
-	Content []byte     `xml:",innerxml"`
-	Nodes   []Node     `xml:",any"`
-}
-
-//UnmarshalXML decodes XML nodes
-func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
-	n.Attrs = start.Attr
-	type node Node
-
-	return d.DecodeElement((*node)(n), &start)
-}
-
-func walk(nodes []Node, f func(Node) bool) {
-	for _, n := range nodes {
-		if f(n) {
-			walk(n.Nodes, f)
-		}
-	}
-}
-
-// Vertex is an x and y coordinate
-type Vertex struct {
-	x int
-	y int
-}
-
-// Path is an array of vertex
-type Path struct {
-	vertices []Vertex
-}
-
 // Controls describes the current state of the input
 type Controls struct {
 	up    bool
@@ -130,191 +95,12 @@ type Game struct {
 	inited         bool
 	player         Player
 	bullets        Bullets
-	paths          []Path
 	score          int
 	particles      Particles
 	difficulty     int
 	controls       Controls
 	sprites        map[string]Sprite
 }
-
-// Hitbox is used on many items in the game to determine collisions
-type Hitbox struct {
-	x float64
-	y float64
-	w float64
-	h float64
-}
-
-// Player is the player state object
-type Player struct {
-	x           float64
-	y           float64
-	vx          float64
-	vy          float64
-	speed       float64
-	maxSpeed    float64
-	fireRate    int16
-	maxFireRate int16
-	hitbox      Hitbox
-	lives       int
-	toDelete    bool
-	safety      int
-}
-
-func newPlayer() Player {
-	return Player{
-		x:           (screenWidth / 2) - 16,
-		y:           screenHeight - 50,
-		vx:          0,
-		vy:          0,
-		speed:       2,
-		maxSpeed:    4,
-		fireRate:    0,
-		maxFireRate: 8,
-		hitbox: Hitbox{
-			x: 8,
-			y: 8,
-			w: 8,
-			h: 8,
-		},
-		safety: 120,
-	}
-}
-
-// Bullet is our player bullets
-type Bullet struct {
-	imageWidth  int
-	imageHeight int
-	x           float64
-	y           float64
-	vx          float64
-	vy          float64
-	angle       int
-	toDelete    bool
-	hitbox      Hitbox
-}
-
-//Bullets is an array of bullet
-type Bullets struct {
-	bullets []*Bullet
-	num     int
-}
-
-// Particle is a simple object that can move long a velocity, grow and shrink, etc. Used in visual effects.
-type Particle struct {
-	x            float64
-	y            float64
-	vx           float64
-	vy           float64
-	size         float64
-	sizev        float64
-	speed        float64
-	speedv       float64
-	particleType int
-	col1         ebiten.ColorM
-	col2         ebiten.ColorM
-	col3         ebiten.ColorM
-	life         int
-	toDelete     bool
-	t            int
-	forever      bool
-}
-
-// Particles are multiple Particle
-type Particles struct {
-	particles []*Particle
-	num       int
-}
-
-// Update for every particle
-func (s *Particles) Update() {
-	for i := 0; i < len(s.particles); i++ {
-		s.particles[i].Update()
-	}
-}
-
-// Update runs once for every particle
-func (s *Particle) Update() {
-
-	s.x += s.vx
-	s.y += s.vy
-	s.speed += s.speedv
-	s.size += s.sizev
-	if !s.forever {
-		s.life--
-		if s.life < 0 {
-			s.toDelete = true
-		}
-	}
-
-	// special behaviour for falling stars, they wrap back to the top once they reach the bottom
-	if s.particleType == 0 {
-		if s.y > screenHeight {
-			s.y = -64
-		} // wrap around to top
-	}
-
-	s.t++ // time ticks on
-}
-
-// Actor is a structure for enemies
-type Actor struct {
-	imageWidth  int
-	imageHeight int
-	x           float64
-	y           float64
-	vx          float64
-	vy          float64
-	angle       int
-	enemyType   int
-	toDelete    bool
-	t           int
-	hitbox      Hitbox
-}
-
-// Actors is an array opf Actor
-type Actors struct {
-	actors []*Actor
-	num    int
-}
-
-// Update runs against every actor
-func (a *Actors) Update(g *Game) {
-	for i := 0; i < len(a.actors); i++ {
-		var e = a.actors[i] // enemy
-		var p = g.player    // player
-
-		if collide(
-			e.x+e.hitbox.x,
-			e.y+e.hitbox.y,
-			e.hitbox.w,
-			e.hitbox.h,
-			p.x+p.hitbox.x,
-			p.y+p.hitbox.y,
-			p.hitbox.w,
-			p.hitbox.h,
-		) {
-			g.player.toDelete = true
-		}
-		a.actors[i].Update()
-	}
-}
-
-// Update an Actor
-func (a *Actor) Update() {
-	//if a.enemyType == 0 {
-	a.vx = float64(math.Sin(float64(a.t / 10)))
-	a.vy = float64(math.Sin(float64(a.t/20) + 80))
-	//}
-
-	a.x += a.vx
-	a.y += a.vy
-
-	a.t++ // tick the timer for this actor
-}
-
-/** /ACTORS */
 
 func (g *Game) init() {
 	defer func() {
@@ -389,18 +175,6 @@ func (g *Game) init() {
 		})
 	}
 
-}
-
-func bulletExists(arr []*Bullet, index int) bool {
-	return (len(arr) > index)
-}
-
-func collide(x1 float64, y1 float64, w1 float64, h1 float64, x2 float64, y2 float64, w2 float64, h2 float64) bool {
-	// Check x and y for overlap
-	if x2 > w1+x1 || x1 > w2+x2 || y2 > h1+y1 || y1 > h2+y2 {
-		return false
-	}
-	return true
 }
 
 // Update the Game object
@@ -664,10 +438,6 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	g.particles.Update()
 
 	return nil
-}
-
-func spriteDraw(screen *ebiten.Image, g *Game, sprite string) {
-	screen.DrawImage(spriteAtlas.SubImage(image.Rect(g.sprites[sprite].x, g.sprites[sprite].y, g.sprites[sprite].x+g.sprites[sprite].width, g.sprites[sprite].y+g.sprites[sprite].height)).(*ebiten.Image), &g.op)
 }
 
 /** GAME MAIN DRAW */
