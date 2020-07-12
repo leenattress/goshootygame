@@ -4,14 +4,14 @@ tasks:
 
   run:
     cmds:
-      - go run main.go
+      - go run src/main.go
 
   build:
     cmds:
-      - env GOOS=windows GOARCH=amd64 go build -o build/shooty.exe -v -i main.go
-      - go run assets.go
-      - cp -r ./assets build/assets      
+      - go run tools/assets.go
+      - go get -u github.com/go-bindata/go-bindata/...
+      - env GOOS=windows GOARCH=amd64 go build -o build/shooty.exe -v -i src/main.go
 
   assets:
     cmds:
-      - go run assets.go
+      - go run tools/assets.go
