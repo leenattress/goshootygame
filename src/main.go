@@ -95,7 +95,7 @@ const (
 )
 
 var (
-	debug       bool = true
+	debug       bool = false
 	spriteAtlas *ebiten.Image
 )
 
@@ -271,7 +271,7 @@ func (a *Actors) Update(g *Game) {
 			p.hitbox.w,
 			p.hitbox.h,
 		) {
-			log.Println("COLLIDE")
+			//log.Println("COLLIDE")
 		}
 		a.actors[i].Update()
 	}
