@@ -66,6 +66,7 @@ Tasks - Galaga Clone
 [x] - enemy ships can be shot and die
 [x] - player has lives
 [x] - Migrate to sprite atlas, instead of individual sprites.
+[x] - Pack all the assets into the executable.
 [ ] - enemy ships can hit player, and lose a life
 [ ] - enemy ships can shoot downwards
 [ ] - enemy bullets can hit player, and lose a life
@@ -224,10 +225,6 @@ func (s *Particle) Update() {
 		}
 	}
 
-	// if s.life != -1 {
-	// 	s.life -= 1 // life ebbs away for this particle
-	// }
-
 	// special behaviour for falling stars, they wrap back to the top once they reach the bottom
 	if s.particleType == 0 {
 		if s.y > screenHeight {
@@ -240,7 +237,7 @@ func (s *Particle) Update() {
 
 /** /PARTICLES */
 
-/** Actors (enemies) */
+/** ACTORS (enemies) */
 type Actor struct {
 	imageWidth  int
 	imageHeight int
@@ -291,7 +288,7 @@ func (a *Actor) Update() {
 	a.t += 1 // tick the timer for this actor
 }
 
-/** /Actors */
+/** /ACTORS */
 
 func (g *Game) init() {
 	defer func() {
@@ -756,23 +753,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			ebitenutil.DebugPrint(screen, str)
 		}
 	}
-
-	// draw path debug
-	// var thisPath = g.paths[0]
-	// if len(thisPath.vertices) > 1 {
-	// 	for i := 0; i < len(thisPath.vertices); i++ {
-	// 		if i > 0 {
-	// 			ebitenutil.DrawLine(
-	// 				screen,
-	// 				float64(thisPath.vertices[i].x),
-	// 				float64(thisPath.vertices[i].y),
-	// 				float64(thisPath.vertices[i-1].x),
-	// 				float64(thisPath.vertices[i-1].y),
-	// 				color.NRGBA{0x00, 0x00, 0xff, 0xff},
-	// 			)
-	// 		}
-	// 	}
-	// }
 
 	for i := 0; i < len(g.particles.particles); i++ {
 		s := g.particles.particles[i]
