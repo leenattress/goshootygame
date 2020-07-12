@@ -16,43 +16,6 @@ import (
 	"strconv"
 )
 
-// /* xml things */
-// var data = []byte(`
-// <TextureAtlas imagePath="atlas-1.png">
-//     <SubTexture name="circleWhite" x="0" y="0" width="64" height="64"/>
-//     <SubTexture name="player" x="64" y="0" width="32" height="32"/>
-//     <SubTexture name="enemy1" x="96" y="0" width="32" height="32"/>
-//     <SubTexture name="enemy2" x="128" y="0" width="32" height="32"/>
-//     <SubTexture name="enemy3" x="160" y="0" width="32" height="32"/>
-//     <SubTexture name="lives" x="192" y="0" width="16" height="16"/>
-//     <SubTexture name="bullet" x="208" y="0" width="8" height="8"/>
-//     <SubTexture name="starFast" x="64" y="32" width="1" height="32"/>
-//     <SubTexture name="starSlow" x="65" y="32" width="1" height="32"/>
-// </TextureAtlas>
-// `)
-
-type Node struct {
-	XMLName xml.Name
-	Attrs   []xml.Attr `xml:"-"`
-	Content []byte     `xml:",innerxml"`
-	Nodes   []Node     `xml:",any"`
-}
-
-func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
-	n.Attrs = start.Attr
-	type node Node
-
-	return d.DecodeElement((*node)(n), &start)
-}
-
-func walk(nodes []Node, f func(Node) bool) {
-	for _, n := range nodes {
-		if f(n) {
-			walk(n.Nodes, f)
-		}
-	}
-}
-
 /*
 
 Tasks - Galaga Clone
@@ -103,15 +66,42 @@ func init() {
 
 }
 
-/** PATHS */
+// Node is an XML node
+type Node struct {
+	XMLName xml.Name
+	Attrs   []xml.Attr `xml:"-"`
+	Content []byte     `xml:",innerxml"`
+	Nodes   []Node     `xml:",any"`
+}
+
+//UnmarshalXML decodes XML nodes
+func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	n.Attrs = start.Attr
+	type node Node
+
+	return d.DecodeElement((*node)(n), &start)
+}
+
+func walk(nodes []Node, f func(Node) bool) {
+	for _, n := range nodes {
+		if f(n) {
+			walk(n.Nodes, f)
+		}
+	}
+}
+
+// Vertex is an x and y coordinate
 type Vertex struct {
 	x int
 	y int
 }
+
+// Path is an array of vertex
 type Path struct {
 	vertices []Vertex
 }
 
+// Controls describes the current state of the input
 type Controls struct {
 	up    bool
 	down  bool
@@ -119,6 +109,8 @@ type Controls struct {
 	right bool
 	fire  bool
 }
+
+// Sprite is used in the construction of the sprite atlas object
 type Sprite struct {
 	name   string
 	x      int
@@ -126,6 +118,8 @@ type Sprite struct {
 	width  int
 	height int
 }
+
+// Game is the state of our game
 type Game struct {
 	gamepadIDs     map[int]struct{}
 	axes           map[int][]string
@@ -143,12 +137,15 @@ type Game struct {
 	sprites        map[string]Sprite
 }
 
+// Hitbox is used on many items in the game to determine collisions
 type Hitbox struct {
 	x float64
 	y float64
 	w float64
 	h float64
 }
+
+// Player is the player state object
 type Player struct {
 	x           float64
 	y           float64
@@ -160,9 +157,31 @@ type Player struct {
 	maxFireRate int16
 	hitbox      Hitbox
 	lives       int
+	toDelete    bool
+	safety      int
 }
 
-/** BULLETS */
+func newPlayer() Player {
+	return Player{
+		x:           (screenWidth / 2) - 16,
+		y:           screenHeight - 50,
+		vx:          0,
+		vy:          0,
+		speed:       2,
+		maxSpeed:    4,
+		fireRate:    0,
+		maxFireRate: 8,
+		hitbox: Hitbox{
+			x: 8,
+			y: 8,
+			w: 8,
+			h: 8,
+		},
+		safety: 120,
+	}
+}
+
+// Bullet is our player bullets
 type Bullet struct {
 	imageWidth  int
 	imageHeight int
@@ -174,14 +193,14 @@ type Bullet struct {
 	toDelete    bool
 	hitbox      Hitbox
 }
+
+//Bullets is an array of bullet
 type Bullets struct {
 	bullets []*Bullet
 	num     int
 }
 
-/** /BULLETS */
-
-/** PARTICLES */
+// Particle is a simple object that can move long a velocity, grow and shrink, etc. Used in visual effects.
 type Particle struct {
 	x            float64
 	y            float64
@@ -201,17 +220,20 @@ type Particle struct {
 	forever      bool
 }
 
+// Particles are multiple Particle
 type Particles struct {
 	particles []*Particle
 	num       int
 }
 
+// Update for every particle
 func (s *Particles) Update() {
 	for i := 0; i < len(s.particles); i++ {
 		s.particles[i].Update()
 	}
 }
 
+// Update runs once for every particle
 func (s *Particle) Update() {
 
 	s.x += s.vx
@@ -219,7 +241,7 @@ func (s *Particle) Update() {
 	s.speed += s.speedv
 	s.size += s.sizev
 	if !s.forever {
-		s.life -= 1
+		s.life--
 		if s.life < 0 {
 			s.toDelete = true
 		}
@@ -232,12 +254,10 @@ func (s *Particle) Update() {
 		} // wrap around to top
 	}
 
-	s.t += 1 // time ticks on
+	s.t++ // time ticks on
 }
 
-/** /PARTICLES */
-
-/** ACTORS (enemies) */
+// Actor is a structure for enemies
 type Actor struct {
 	imageWidth  int
 	imageHeight int
@@ -251,11 +271,14 @@ type Actor struct {
 	t           int
 	hitbox      Hitbox
 }
+
+// Actors is an array opf Actor
 type Actors struct {
 	actors []*Actor
 	num    int
 }
 
+// Update runs against every actor
 func (a *Actors) Update(g *Game) {
 	for i := 0; i < len(a.actors); i++ {
 		var e = a.actors[i] // enemy
@@ -271,11 +294,13 @@ func (a *Actors) Update(g *Game) {
 			p.hitbox.w,
 			p.hitbox.h,
 		) {
-			//log.Println("COLLIDE")
+			g.player.toDelete = true
 		}
 		a.actors[i].Update()
 	}
 }
+
+// Update an Actor
 func (a *Actor) Update() {
 	//if a.enemyType == 0 {
 	a.vx = float64(math.Sin(float64(a.t / 10)))
@@ -285,7 +310,7 @@ func (a *Actor) Update() {
 	a.x += a.vx
 	a.y += a.vy
 
-	a.t += 1 // tick the timer for this actor
+	a.t++ // tick the timer for this actor
 }
 
 /** /ACTORS */
@@ -348,20 +373,9 @@ func (g *Game) init() {
 
 	g.sprites = m
 
-	fmt.Println(g.sprites)
+	// fmt.Println(g.sprites) // this is our sprite atlas data
 
-	g.player.x = (screenWidth / 2) - 16
-	g.player.y = screenHeight - 50
-	g.player.vx = 0
-	g.player.vy = 0
-	g.player.speed = 2
-	g.player.maxSpeed = 4
-	g.player.fireRate = 0
-	g.player.maxFireRate = 8
-	g.player.hitbox.x = 8
-	g.player.hitbox.y = 8
-	g.player.hitbox.w = 8
-	g.player.hitbox.h = 8
+	g.player = newPlayer()
 	g.player.lives = 3
 
 	// create some star particles
@@ -388,7 +402,7 @@ func collide(x1 float64, y1 float64, w1 float64, h1 float64, x2 float64, y2 floa
 	return true
 }
 
-/** GAME MAIN UPDATE */
+// Update the Game object
 func (g *Game) Update(screen *ebiten.Image) error {
 	if !g.inited {
 		g.init()
@@ -535,7 +549,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 
 		// limit fire rate
 		if g.player.fireRate > 0 {
-			g.player.fireRate -= 1
+			g.player.fireRate--
 		}
 	}
 	g.actors.Update(g)
@@ -557,7 +571,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 			) {
 				g.bullets.bullets[i].toDelete = true
 				g.actors.actors[j].toDelete = true
-				g.score += 1
+				g.score++
 
 				// big shite flash
 				g.particles.particles = append(g.particles.particles, &Particle{
@@ -618,7 +632,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 					})
 				}
 			}
-			g.difficulty += 1
+			g.difficulty++
 		}
 	}
 
@@ -810,6 +824,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DebugPrint(screen, fmt.Sprintf("SCORE: %d  -  WAVE: %d ", g.score*1000, g.difficulty))
 }
 
+// Layout is part of the ebiten framework
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return screenWidth, screenHeight
 }
