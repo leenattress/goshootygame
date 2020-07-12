@@ -87,6 +87,7 @@ type Sprite struct {
 
 // Game is the state of our game
 type Game struct {
+	time           int
 	gamepadIDs     map[int]struct{}
 	axes           map[int][]string
 	pressedButtons map[int][]string
@@ -164,6 +165,7 @@ func (g *Game) init() {
 
 	g.player = newPlayer()
 	g.player.lives = 3
+	g.player.safety = 60 * 4
 
 	// create some star particles
 	for i := 0; i < 50; i++ {
@@ -182,6 +184,8 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	if !g.inited {
 		g.init()
 	}
+
+	g.time++
 
 	g.player.vx = 0
 	g.player.vy = 0
@@ -270,63 +274,65 @@ func (g *Game) Update(screen *ebiten.Image) error {
 			}
 		}
 
-		if g.controls.right {
-			g.player.vx = g.player.speed
-		}
-		if g.controls.left {
-			g.player.vx = -g.player.speed
-		}
-		if g.controls.down {
-			g.player.vy = g.player.speed
-		}
-		if g.controls.up {
-			g.player.vy = -g.player.speed
-		}
-		if g.controls.fire {
-			if g.player.fireRate == 0 {
-				g.player.fireRate = g.player.maxFireRate
-				g.bullets.bullets = append(g.bullets.bullets, &Bullet{
-					imageWidth:  8,
-					imageHeight: 8,
-					x:           g.player.x + 12, // bullet spawn at nose
-					y:           g.player.y + 4,
-					vx:          0,
-					vy:          -6,
-					angle:       0,
-					hitbox: Hitbox{
-						x: 0,
-						y: 0,
-						w: 8,
-						h: 8,
-					},
-				})
-				g.bullets.num = len(g.bullets.bullets)
-			}
-		}
+	}
 
-		//act on movement for player
-		g.player.x += g.player.vx
-		g.player.y += g.player.vy
-
-		// screen edges for player
-		if g.player.x > screenWidth-32 {
-			g.player.x = screenWidth - 32
-		}
-		if g.player.x < 0 {
-			g.player.x = 0
-		}
-		if g.player.y > screenHeight-32 {
-			g.player.y = screenHeight - 32
-		}
-		if g.player.y < 0 {
-			g.player.y = 0
-		}
-
-		// limit fire rate
-		if g.player.fireRate > 0 {
-			g.player.fireRate--
+	if g.controls.right {
+		g.player.vx = g.player.speed
+	}
+	if g.controls.left {
+		g.player.vx = -g.player.speed
+	}
+	if g.controls.down {
+		g.player.vy = g.player.speed
+	}
+	if g.controls.up {
+		g.player.vy = -g.player.speed
+	}
+	if g.controls.fire {
+		if g.player.fireRate == 0 {
+			g.player.fireRate = g.player.maxFireRate
+			g.bullets.bullets = append(g.bullets.bullets, &Bullet{
+				imageWidth:  8,
+				imageHeight: 8,
+				x:           g.player.x + 12, // bullet spawn at nose
+				y:           g.player.y + 4,
+				vx:          0,
+				vy:          -6,
+				angle:       0,
+				hitbox: Hitbox{
+					x: 0,
+					y: 0,
+					w: 8,
+					h: 8,
+				},
+			})
+			g.bullets.num = len(g.bullets.bullets)
 		}
 	}
+
+	//act on movement for player
+	g.player.x += g.player.vx
+	g.player.y += g.player.vy
+
+	// screen edges for player
+	if g.player.x > screenWidth-32 {
+		g.player.x = screenWidth - 32
+	}
+	if g.player.x < 0 {
+		g.player.x = 0
+	}
+	if g.player.y > screenHeight-32 {
+		g.player.y = screenHeight - 32
+	}
+	if g.player.y < 0 {
+		g.player.y = 0
+	}
+
+	// limit fire rate
+	if g.player.fireRate > 0 {
+		g.player.fireRate--
+	}
+
 	g.actors.Update(g)
 
 	for i := len(g.bullets.bullets) - 1; i >= 0; i-- {
@@ -471,6 +477,51 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	//screen.DrawImage(playerImg, &g.op)
 
 	spriteDraw(screen, g, "player")
+
+	// some rotating stars
+	wp, hp := g.sprites["player"].width, g.sprites["player"].height       // player width/height
+	ws, hs := g.sprites["starSmall"].width, g.sprites["starSmall"].height // small star
+	wst, hst := g.sprites["starTiny"].width, g.sprites["starTiny"].height // tiny star
+
+	if g.player.safety > 0 {
+
+		for i := 0; i < 6; i++ {
+			g.op.GeoM.Reset()
+			g.op.GeoM.Translate(-float64(ws)/2, -float64(hs)/2) // center this sprite
+			g.op.GeoM.Translate(float64(wp)/2, float64(hp)/2)   // center on player
+			g.op.GeoM.Translate(
+				float64(
+					g.player.x+ldX(
+						24, float64(g.time+(i*10))/10,
+					),
+				),
+				float64(
+					g.player.y+ldY(
+						24, float64(g.time+(i*10))/10,
+					),
+				),
+			)
+			spriteDraw(screen, g, "starSmall")
+
+			g.op.GeoM.Reset()
+			g.op.GeoM.Translate(-float64(wst)/2, -float64(hst)/2)
+			g.op.GeoM.Translate(float64(wp)/2, float64(hp)/2)
+			g.op.GeoM.Translate(
+				float64(
+					g.player.x+ldX(
+						32, -float64(g.time+(i*18))/18,
+					),
+				),
+				float64(
+					g.player.y+ldY(
+						32, -float64(g.time+(i*18))/18,
+					),
+				),
+			)
+			spriteDraw(screen, g, "starTiny")
+		}
+		g.player.safety--
+	}
 
 	w, h := g.sprites["bullet"].width, g.sprites["bullet"].height
 	for i := 0; i < len(g.bullets.bullets); i++ {

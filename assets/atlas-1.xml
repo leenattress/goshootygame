@@ -1,11 +1,13 @@
 <TextureAtlas imagePath="atlas-1.png">
     <SubTexture name="circleWhite" x="0" y="0" width="64" height="64"/>
-    <SubTexture name="enemy2" x="64" y="0" width="32" height="32"/>
-    <SubTexture name="enemy1" x="96" y="0" width="32" height="32"/>
+    <SubTexture name="enemy1" x="64" y="0" width="32" height="32"/>
+    <SubTexture name="enemy3" x="96" y="0" width="32" height="32"/>
     <SubTexture name="player" x="128" y="0" width="32" height="32"/>
-    <SubTexture name="enemy3" x="160" y="0" width="32" height="32"/>
+    <SubTexture name="enemy2" x="160" y="0" width="32" height="32"/>
     <SubTexture name="lives" x="192" y="0" width="16" height="16"/>
-    <SubTexture name="bullet" x="208" y="0" width="8" height="8"/>
+    <SubTexture name="starSmall" x="208" y="0" width="11" height="11"/>
+    <SubTexture name="bullet" x="219" y="0" width="8" height="8"/>
+    <SubTexture name="starTiny" x="227" y="0" width="7" height="7"/>
     <SubTexture name="starFast" x="64" y="32" width="1" height="32"/>
     <SubTexture name="starSlow" x="65" y="32" width="1" height="32"/>
 </TextureAtlas>

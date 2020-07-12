@@ -9,8 +9,8 @@ tasks:
   build:
     cmds:
       - go run tools/assets.go
-      #- file2byteslice -input assets/atlas-1.xml -output src/atlas.go -package atlasxml -var packagexml
-      #- file2byteslice -input assets/atlas-1.png -output src/images.go -package atlaspng -var packagepng
+      #- file2byteslice -input assets/atlas-1.xml -output src/atlas.go -package main -var packagexml
+      #- file2byteslice -input assets/atlas-1.png -output src/images.go -package main -var packagepng
       - env GOOS=windows GOARCH=amd64 go build -o build/shooty.exe -v -i src/*.go
       #- env GOOS=linux GOARCH=amd64 go build -o build/shooty -v -i src/*.go
 
