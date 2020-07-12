@@ -30,6 +30,7 @@ Tasks - Galaga Clone
 [x] - player has lives
 [x] - Migrate to sprite atlas, instead of individual sprites.
 [x] - Pack all the assets into the executable.
+[ ] - Temporary immunity on spawn
 [ ] - enemy ships can hit player, and lose a life
 [ ] - enemy ships can shoot downwards
 [ ] - enemy bullets can hit player, and lose a life
