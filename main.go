@@ -1,18 +1,57 @@
 package main
 
 import (
+	"bytes"
+	"encoding/xml"
 	"fmt"
+	"github.com/hajimehoshi/ebiten"
+	"github.com/hajimehoshi/ebiten/ebitenutil"
+	"github.com/hajimehoshi/ebiten/inpututil"
+	"image"
 	"image/color"
 	_ "image/png"
 	"log"
 	"math"
 	"math/rand"
 	"strconv"
-
-	"github.com/hajimehoshi/ebiten"
-	"github.com/hajimehoshi/ebiten/ebitenutil"
-	"github.com/hajimehoshi/ebiten/inpututil"
 )
+
+/* xml things */
+var data = []byte(`
+<TextureAtlas imagePath="atlas-1.png">
+    <SubTexture name="circleWhite" x="0" y="0" width="64" height="64"/>
+    <SubTexture name="player" x="64" y="0" width="32" height="32"/>
+    <SubTexture name="enemy1" x="96" y="0" width="32" height="32"/>
+    <SubTexture name="enemy2" x="128" y="0" width="32" height="32"/>
+    <SubTexture name="enemy3" x="160" y="0" width="32" height="32"/>
+    <SubTexture name="lives" x="192" y="0" width="16" height="16"/>
+    <SubTexture name="bullet" x="208" y="0" width="8" height="8"/>
+    <SubTexture name="starFast" x="64" y="32" width="1" height="32"/>
+    <SubTexture name="starSlow" x="65" y="32" width="1" height="32"/>
+</TextureAtlas>
+`)
+
+type Node struct {
+	XMLName xml.Name
+	Attrs   []xml.Attr `xml:"-"`
+	Content []byte     `xml:",innerxml"`
+	Nodes   []Node     `xml:",any"`
+}
+
+func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	n.Attrs = start.Attr
+	type node Node
+
+	return d.DecodeElement((*node)(n), &start)
+}
+
+func walk(nodes []Node, f func(Node) bool) {
+	for _, n := range nodes {
+		if f(n) {
+			walk(n.Nodes, f)
+		}
+	}
+}
 
 /*
 
@@ -25,12 +64,13 @@ Tasks - Galaga Clone
 [x] - limit fire rate for player
 [x] - enemy ships can be created
 [x] - enemy ships can be shot and die
-[ ] - player has lives
+[x] - player has lives
+[x] - Migrate to sprite atlas, instead of individual sprites.
 [ ] - enemy ships can hit player, and lose a life
 [ ] - enemy ships can shoot downwards
 [ ] - enemy bullets can hit player, and lose a life
 [x] - explosions on all things that need it
-[ ] - scoring
+[x] - scoring
 [ ] - fabulous ui
 [ ] - title screen
 [ ] - game over screen
@@ -55,61 +95,14 @@ const (
 
 var (
 	debug       bool = false
-	bulletImg   *ebiten.Image
-	playerImg   *ebiten.Image
-	starSlowImg *ebiten.Image
-	starFastImg *ebiten.Image
-	enemy1      *ebiten.Image
-	enemy2      *ebiten.Image
-	enemy3      *ebiten.Image
-	circleWhite *ebiten.Image
-	playerLife  *ebiten.Image
+	spriteAtlas *ebiten.Image
 )
 
 func init() {
 
-	// player image
+	// image atlas
 	var err error
-	playerImg, _, err = ebitenutil.NewImageFromFile("assets/player.png", ebiten.FilterDefault)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	bulletImg, _, err = ebitenutil.NewImageFromFile("assets/bullet.png", ebiten.FilterDefault)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	starSlowImg, _, err = ebitenutil.NewImageFromFile("assets/starSlow.png", ebiten.FilterDefault)
-	if err != nil {
-		log.Fatal(err)
-	}
-	starFastImg, _, err = ebitenutil.NewImageFromFile("assets/starFast.png", ebiten.FilterDefault)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	enemy1, _, err = ebitenutil.NewImageFromFile("assets/enemy1.png", ebiten.FilterDefault)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	enemy2, _, err = ebitenutil.NewImageFromFile("assets/enemy2.png", ebiten.FilterDefault)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	enemy3, _, err = ebitenutil.NewImageFromFile("assets/enemy3.png", ebiten.FilterDefault)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	circleWhite, _, err = ebitenutil.NewImageFromFile("assets/circleWhite.png", ebiten.FilterDefault)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	playerLife, _, err = ebitenutil.NewImageFromFile("assets/lives.png", ebiten.FilterDefault)
+	spriteAtlas, _, err = ebitenutil.NewImageFromFile("assets/atlas-1.png", ebiten.FilterDefault)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -132,6 +125,13 @@ type Controls struct {
 	right bool
 	fire  bool
 }
+type Sprite struct {
+	name   string
+	x      int
+	y      int
+	width  int
+	height int
+}
 type Game struct {
 	gamepadIDs     map[int]struct{}
 	axes           map[int][]string
@@ -146,6 +146,7 @@ type Game struct {
 	particles      Particles
 	difficulty     int
 	controls       Controls
+	sprites        map[string]Sprite
 }
 
 type Hitbox struct {
@@ -289,23 +290,53 @@ func (g *Game) init() {
 		g.inited = true
 	}()
 
-	// define some vertex paths for enemies to follow
-	g.paths = make([]Path, 0)
-	g.paths = append(g.paths, Path{
-		[]Vertex{
-			{
-				x: 50,
-				y: 100,
-			},
-			{
-				x: 100,
-				y: 220,
-			},
-			{
-				x: 95,
-				y: 150,
-			},
-		}})
+	// prepare the sprite atlas in memory
+	buf := bytes.NewBuffer(data)
+	dec := xml.NewDecoder(buf)
+
+	var n Node
+	errXML := dec.Decode(&n)
+	if errXML != nil {
+		panic(errXML)
+	}
+
+	m := make(map[string]Sprite)
+
+	walk([]Node{n}, func(n Node) bool {
+		if n.XMLName.Local == "SubTexture" {
+			// fmt.Println(string(n.Content))
+
+			x, err := strconv.Atoi(n.Attrs[1].Value)
+			if err != nil {
+				panic(err)
+			}
+			y, err := strconv.Atoi(n.Attrs[2].Value)
+			if err != nil {
+				panic(err)
+			}
+			width, err := strconv.Atoi(n.Attrs[3].Value)
+			if err != nil {
+				panic(err)
+			}
+			height, err := strconv.Atoi(n.Attrs[4].Value)
+			if err != nil {
+				panic(err)
+			}
+
+			m[n.Attrs[0].Value] = Sprite{
+				name:   n.Attrs[0].Value,
+				x:      x,
+				y:      y,
+				width:  width,
+				height: height,
+			}
+		}
+		return true
+	})
+
+	g.sprites = m
+
+	fmt.Println(g.sprites)
 
 	g.player.x = (screenWidth / 2) - 16
 	g.player.y = screenHeight - 50
@@ -608,6 +639,10 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	return nil
 }
 
+func spriteDraw(screen *ebiten.Image, g *Game, sprite string) {
+	screen.DrawImage(spriteAtlas.SubImage(image.Rect(g.sprites[sprite].x, g.sprites[sprite].y, g.sprites[sprite].x+g.sprites[sprite].width, g.sprites[sprite].y+g.sprites[sprite].height)).(*ebiten.Image), &g.op)
+}
+
 /** GAME MAIN DRAW */
 func (g *Game) Draw(screen *ebiten.Image) {
 
@@ -636,9 +671,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	//g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
 	//g.op.GeoM.Translate(float64(w)/2, float64(h)/2)
 	g.op.GeoM.Translate(float64(g.player.x), float64(g.player.y))
-	screen.DrawImage(playerImg, &g.op)
+	//screen.DrawImage(playerImg, &g.op)
 
-	w, h := bulletImg.Size()
+	spriteDraw(screen, g, "player")
+
+	w, h := g.sprites["bullet"].width, g.sprites["bullet"].height
 	for i := 0; i < len(g.bullets.bullets); i++ {
 		if !g.bullets.bullets[i].toDelete {
 			s := g.bullets.bullets[i]
@@ -647,7 +684,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
 			g.op.GeoM.Translate(float64(w)/2, float64(h)/2)
 			g.op.GeoM.Translate(float64(s.x), float64(s.y))
-			screen.DrawImage(bulletImg, &g.op)
+			//screen.DrawImage(bulletImg, &g.op)
+			spriteDraw(screen, g, "bullet")
 			if debug {
 				ebitenutil.DrawRect(
 					screen,
@@ -665,31 +703,30 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		if !g.actors.actors[i].toDelete {
 			s := g.actors.actors[i]
 
-			var thisImg *ebiten.Image
+			var thisEnemy string
+			//var thisImg *ebiten.Image
 			var w, h int
 
 			if s.enemyType == 0 {
-				w = 32
-				h = 32
-				thisImg = enemy1
+				thisEnemy = "enemy1"
 			}
 			if s.enemyType == 1 {
-				w = 32
-				h = 32
-				thisImg = enemy2
+				thisEnemy = "enemy2"
 			}
 			if s.enemyType == 2 {
-				w = 32
-				h = 32
-				thisImg = enemy3
+				thisEnemy = "enemy3"
 			}
+			w = g.sprites[thisEnemy].width
+			h = g.sprites[thisEnemy].height
 
 			g.op.GeoM.Reset()
-			g.op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
-			g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
+			//g.op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+			//g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
 			g.op.GeoM.Translate(float64(w)/2, float64(h)/2)
 			g.op.GeoM.Translate(float64(s.x), float64(s.y))
-			screen.DrawImage(thisImg, &g.op)
+			//screen.DrawImage(thisImg, &g.op)
+			spriteDraw(screen, g, thisEnemy)
+
 			if debug {
 				ebitenutil.DrawRect(
 					screen,
@@ -724,16 +761,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	for i := 0; i < len(g.particles.particles); i++ {
 		s := g.particles.particles[i]
+
+		// stars
 		if s.particleType == 0 {
-			var scale float64 = s.vy / 9
+			var scale float64 = s.vy / 9 // magic nine?
 			g.op.GeoM.Reset()
 			g.op.GeoM.Scale(1, float64(scale))
 			g.op.GeoM.Translate(float64(s.x), float64(s.y))
 			g.op.ColorM.Translate(0, 0, 0, -(-scale + 1))
 			if s.vy > 5 {
-				screen.DrawImage(starFastImg, &g.op)
+				spriteDraw(screen, g, "starSlow")
 			} else {
-				screen.DrawImage(starSlowImg, &g.op)
+				spriteDraw(screen, g, "starFast")
 			}
 			g.op.ColorM.Reset()
 		}
@@ -741,27 +780,29 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		// fireballs
 		if s.particleType == 1 {
 			var scale float64 = s.size / 100 // between 0 and 1
-			var w, _ = circleWhite.Size()
-			var nudge float64 = float64(w) * scale
+			w, h := g.sprites["circleWhite"].width, g.sprites["circleWhite"].height
+			var nudgex float64 = float64(w) * scale
+			var nudgey float64 = float64(h) * scale
 
 			g.op.GeoM.Reset()
 			g.op.GeoM.Scale(s.size/100, s.size/100)
-			g.op.GeoM.Translate(float64(s.x-(nudge/2)), float64(s.y-(nudge/2)))
+			g.op.GeoM.Translate(float64(s.x-(nudgex/2)), float64(s.y-(nudgey/2)))
 
 			g.op.ColorM.Translate(2, -scale*2, -1, 0)
-			screen.DrawImage(circleWhite, &g.op)
+			spriteDraw(screen, g, "circleWhite")
 			g.op.ColorM.Reset()
 		}
 		// big white circle
 		if s.particleType == 2 {
 			var scale float64 = s.size / 100 // between 0 and 1
-			var w, _ = circleWhite.Size()
-			var nudge float64 = float64(w) * scale
+			w, h := g.sprites["circleWhite"].width, g.sprites["circleWhite"].height
+			var nudgex float64 = float64(w) * scale
+			var nudgey float64 = float64(h) * scale
 
 			g.op.GeoM.Reset()
 			g.op.GeoM.Scale(scale, scale)
-			g.op.GeoM.Translate(float64(s.x-(nudge/2)), float64(s.y-(nudge/2)))
-			screen.DrawImage(circleWhite, &g.op)
+			g.op.GeoM.Translate(float64(s.x-(nudgex/2)), float64(s.y-(nudgey/2)))
+			spriteDraw(screen, g, "circleWhite")
 			g.op.ColorM.Reset()
 		}
 	}
@@ -769,7 +810,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	for i := 0; i < g.player.lives; i++ {
 		g.op.GeoM.Reset()
 		g.op.GeoM.Translate(float64(16+(i*18)), float64(screenHeight-20))
-		screen.DrawImage(playerLife, &g.op)
+		spriteDraw(screen, g, "lives")
 	}
 	ebitenutil.DebugPrint(screen, fmt.Sprintf("SCORE: %d  -  WAVE: %d ", g.score*1000, g.difficulty))
 }

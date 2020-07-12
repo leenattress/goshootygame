@@ -1,0 +1,17 @@
+version: '2'
+
+tasks:
+
+  run:
+    cmds:
+      - go run main.go
+
+  build:
+    cmds:
+      - env GOOS=windows GOARCH=amd64 go build -o build/shooty.exe -v -i main.go
+      - go run assets.go
+      - cp -r ./assets build/assets      
+
+  assets:
+    cmds:
+      - go run assets.go
