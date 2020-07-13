@@ -1,20 +1,22 @@
-version: '2'
+version: "2"
 
 tasks:
+  winsetup:
+    cmds:
+      - GOBIN=C:/Go/bin GO111MODULE=off go get github.com/hajimehoshi/file2byteslice
 
   run:
     cmds:
+      - task assets
       - go run src/*.go
 
   build:
     cmds:
-      - go run tools/assets.go
-      #- file2byteslice -input assets/atlas-1.xml -output src/atlas.go -package main -var packagexml
-      #- file2byteslice -input assets/atlas-1.png -output src/images.go -package main -var packagepng
+      - task assets
       - env GOOS=windows GOARCH=amd64 go build -o build/shooty.exe -v -i src/*.go
-      #- env GOOS=linux GOARCH=amd64 go build -o build/shooty -v -i src/*.go
-
 
   assets:
     cmds:
       - go run tools/assets.go
+      - file2byteslice -input assets/atlas-1.xml -output src/atlas.go -package main -var packagexml
+      - file2byteslice -input assets/atlas-1.png -output src/images.go -package main -var packagepng

@@ -2,16 +2,16 @@
 
 Using https://ebiten.org/
 
-## Run from Repo
-`go run github.com/leenattress/goshootygame`
+## Task Runner
+[https://taskfile.dev/#/installation](https://taskfile.dev/#/installation)
+
+## Windows Setup
+`task winsetup` - Gets file2byteslice used to compile assets and places it in the Go binary folder
 
 ## Run Local
-`go run main.go`
+`task run` - Compiles assets and runs
 
-## Build Local
-`go build main.go`
-
-## Compile WASM
-`GOOS=js GOARCH=wasm go build -o shooty.wasm github.com/leenattress/goshootygame`
+## Build Local Windows App
+`task build` - Compiles assets and builds windows executable to `build/*.exe`
 
 ![screenshot](goshooty.gif)

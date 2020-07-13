@@ -35,9 +35,13 @@ func ldX(len float64, dir float64) float64 {
 func ldY(len float64, dir float64) float64 {
 	return math.Sin(dir) * len
 }
+
+// pointAng gives you the angle between two points
 func pointAng(cx float64, cy float64, ex float64, ey float64) float64 {
 	return math.Atan2(cx-ex, cy-ey)
 }
+
+// pointDist gives you the distance between two points
 func pointDist(x1 float64, y1 float64, x2 float64, y2 float64) float64 {
 	var x3 float64 = math.Abs(x2 - x1)
 	var y3 float64 = math.Abs(y2 - y1)
