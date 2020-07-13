@@ -30,8 +30,8 @@ Tasks - Galaga Clone
 [x] - player has lives
 [x] - Migrate to sprite atlas, instead of individual sprites.
 [x] - Pack all the assets into the executable.
-[ ] - Temporary immunity on spawn
-[ ] - enemy ships can hit player, and lose a life
+[x] - Temporary immunity on spawn
+[x] - enemy ships can hit player, and lose a life
 [ ] - enemy ships can shoot downwards
 [ ] - enemy bullets can hit player, and lose a life
 [x] - explosions on all things that need it
@@ -61,6 +61,7 @@ const (
 var (
 	debug       bool = false
 	spriteAtlas *ebiten.Image
+	t           int
 )
 
 func init() {
@@ -184,8 +185,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	if !g.inited {
 		g.init()
 	}
-
-	g.time++
+	t++
 
 	g.player.vx = 0
 	g.player.vy = 0
@@ -310,29 +310,32 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		}
 	}
 
-	//act on movement for player
-	g.player.x += g.player.vx
-	g.player.y += g.player.vy
+	// only move and shoot if alive
+	if g.player.alive {
 
-	// screen edges for player
-	if g.player.x > screenWidth-32 {
-		g.player.x = screenWidth - 32
-	}
-	if g.player.x < 0 {
-		g.player.x = 0
-	}
-	if g.player.y > screenHeight-32 {
-		g.player.y = screenHeight - 32
-	}
-	if g.player.y < 0 {
-		g.player.y = 0
-	}
+		//act on movement for player
+		g.player.x += g.player.vx
+		g.player.y += g.player.vy
 
-	// limit fire rate
-	if g.player.fireRate > 0 {
-		g.player.fireRate--
-	}
+		// screen edges for player
+		if g.player.x > screenWidth-32 {
+			g.player.x = screenWidth - 32
+		}
+		if g.player.x < 0 {
+			g.player.x = 0
+		}
+		if g.player.y > screenHeight-32 {
+			g.player.y = screenHeight - 32
+		}
+		if g.player.y < 0 {
+			g.player.y = 0
+		}
 
+		// limit fire rate
+		if g.player.fireRate > 0 {
+			g.player.fireRate--
+		}
+	}
 	g.actors.Update(g)
 
 	for i := len(g.bullets.bullets) - 1; i >= 0; i-- {
@@ -354,30 +357,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 				g.actors.actors[j].toDelete = true
 				g.score++
 
-				// big shite flash
-				g.particles.particles = append(g.particles.particles, &Particle{
-					x:            b.x,
-					y:            b.y,
-					vx:           0,
-					vy:           0,
-					size:         100,
-					sizev:        -10,
-					particleType: 2,
-					life:         6,
-				})
-				// smaller fireballs
-				for i := 0; i < 8; i++ {
-					g.particles.particles = append(g.particles.particles, &Particle{
-						x:            b.x,
-						y:            b.y,
-						vx:           float64(4 - rand.Intn(8)),
-						vy:           float64(4 - rand.Intn(8)),
-						size:         float64(rand.Intn(30) + 20),
-						sizev:        -3,
-						particleType: 1,
-						life:         10,
-					})
-				}
+				explodeSmall(g, b.x, b.y)
 			}
 		}
 
@@ -443,6 +423,10 @@ func (g *Game) Update(screen *ebiten.Image) error {
 
 	g.particles.Update()
 
+	if g.player.toDelete {
+		killPlayer(g)
+	}
+
 	return nil
 }
 
@@ -468,59 +452,69 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 		ebitenutil.DebugPrint(screen, str)
 	}
-	// draw player sprite
-	g.op.GeoM.Reset()
-	//g.op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
-	//g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
-	//g.op.GeoM.Translate(float64(w)/2, float64(h)/2)
-	g.op.GeoM.Translate(float64(g.player.x), float64(g.player.y))
-	//screen.DrawImage(playerImg, &g.op)
 
-	spriteDraw(screen, g, "player")
+	if g.player.alive {
+		// draw player sprite
+		g.op.GeoM.Reset()
+		//g.op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+		//g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
+		//g.op.GeoM.Translate(float64(w)/2, float64(h)/2)
+		g.op.GeoM.Translate(float64(g.player.x), float64(g.player.y))
+		//screen.DrawImage(playerImg, &g.op)
 
-	// some rotating stars
-	wp, hp := g.sprites["player"].width, g.sprites["player"].height       // player width/height
-	ws, hs := g.sprites["starSmall"].width, g.sprites["starSmall"].height // small star
-	wst, hst := g.sprites["starTiny"].width, g.sprites["starTiny"].height // tiny star
-
-	if g.player.safety > 0 {
-
-		for i := 0; i < 6; i++ {
-			g.op.GeoM.Reset()
-			g.op.GeoM.Translate(-float64(ws)/2, -float64(hs)/2) // center this sprite
-			g.op.GeoM.Translate(float64(wp)/2, float64(hp)/2)   // center on player
-			g.op.GeoM.Translate(
-				float64(
-					g.player.x+ldX(
-						24, float64(g.time+(i*10))/10,
-					),
-				),
-				float64(
-					g.player.y+ldY(
-						24, float64(g.time+(i*10))/10,
-					),
-				),
-			)
-			spriteDraw(screen, g, "starSmall")
-
-			g.op.GeoM.Reset()
-			g.op.GeoM.Translate(-float64(wst)/2, -float64(hst)/2)
-			g.op.GeoM.Translate(float64(wp)/2, float64(hp)/2)
-			g.op.GeoM.Translate(
-				float64(
-					g.player.x+ldX(
-						32, -float64(g.time+(i*18))/18,
-					),
-				),
-				float64(
-					g.player.y+ldY(
-						32, -float64(g.time+(i*18))/18,
-					),
-				),
-			)
-			spriteDraw(screen, g, "starTiny")
+		if g.player.safety > 0 {
+			if t%2 == 0 {
+				// flicker is safe
+				spriteDraw(screen, g, "player")
+			}
+		} else {
+			spriteDraw(screen, g, "player")
 		}
-		g.player.safety--
+		// some rotating stars
+		wp, hp := g.sprites["player"].width, g.sprites["player"].height       // player width/height
+		ws, hs := g.sprites["starSmall"].width, g.sprites["starSmall"].height // small star
+		wst, hst := g.sprites["starTiny"].width, g.sprites["starTiny"].height // tiny star
+
+		if g.player.safety > 0 {
+
+			for i := 0; i < 6; i++ {
+				g.op.GeoM.Reset()
+				g.op.GeoM.Translate(-float64(ws)/2, -float64(hs)/2) // center this sprite
+				g.op.GeoM.Translate(float64(wp)/2, float64(hp)/2)   // center on player
+				g.op.GeoM.Translate(
+					float64(
+						g.player.x+ldX(
+							24, float64(t+(i*10))/10,
+						),
+					),
+					float64(
+						g.player.y+ldY(
+							24, float64(t+(i*10))/10,
+						),
+					),
+				)
+				spriteDraw(screen, g, "starSmall")
+
+				g.op.GeoM.Reset()
+				g.op.GeoM.Translate(-float64(wst)/2, -float64(hst)/2)
+				g.op.GeoM.Translate(float64(wp)/2, float64(hp)/2)
+				g.op.GeoM.Translate(
+					float64(
+						g.player.x+ldX(
+							32, -float64(t+(i*18))/18,
+						),
+					),
+					float64(
+						g.player.y+ldY(
+							32, -float64(t+(i*18))/18,
+						),
+					),
+				)
+				spriteDraw(screen, g, "starTiny")
+			}
+			g.player.safety--
+		}
+
 	}
 
 	w, h := g.sprites["bullet"].width, g.sprites["bullet"].height

@@ -41,7 +41,9 @@ func (a *Actors) Update(g *Game) {
 			p.hitbox.w,
 			p.hitbox.h,
 		) {
-			g.player.toDelete = true
+			if g.player.safety <= 0 {
+				g.player.toDelete = true
+			}
 		}
 		a.actors[i].Update()
 	}

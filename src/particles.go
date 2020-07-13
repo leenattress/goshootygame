@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/hajimehoshi/ebiten"
+	"math/rand"
 )
 
 // Particle is a simple object that can move long a velocity, grow and shrink, etc. Used in visual effects.
@@ -59,4 +60,58 @@ func (s *Particle) Update() {
 	}
 
 	s.t++ // time ticks on
+}
+
+func explodeSmall(g *Game, x float64, y float64) {
+	// big white flash
+	g.particles.particles = append(g.particles.particles, &Particle{
+		x:            x,
+		y:            y,
+		vx:           0,
+		vy:           0,
+		size:         100,
+		sizev:        -10,
+		particleType: 2,
+		life:         6,
+	})
+	// smaller fireballs
+	for i := 0; i < 8; i++ {
+		g.particles.particles = append(g.particles.particles, &Particle{
+			x:            x,
+			y:            y,
+			vx:           float64(4 - rand.Intn(8)),
+			vy:           float64(4 - rand.Intn(8)),
+			size:         float64(rand.Intn(30) + 20),
+			sizev:        -3,
+			particleType: 1,
+			life:         10,
+		})
+	}
+}
+
+func explodeBig(g *Game, x float64, y float64) {
+	// big white flash
+	g.particles.particles = append(g.particles.particles, &Particle{
+		x:            x,
+		y:            y,
+		vx:           0,
+		vy:           0,
+		size:         250,
+		sizev:        -10,
+		particleType: 2,
+		life:         8,
+	})
+	// smaller fireballs
+	for i := 0; i < 20; i++ {
+		g.particles.particles = append(g.particles.particles, &Particle{
+			x:            x,
+			y:            y,
+			vx:           float64(4 - rand.Intn(8)),
+			vy:           float64(4 - rand.Intn(8)),
+			size:         float64(rand.Intn(40) + 30),
+			sizev:        -2,
+			particleType: 1,
+			life:         15,
+		})
+	}
 }

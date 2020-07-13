@@ -1,6 +1,8 @@
 package main
 
-import ()
+import (
+	"time"
+)
 
 // Player is the player state object
 type Player struct {
@@ -16,6 +18,7 @@ type Player struct {
 	lives       int
 	toDelete    bool
 	safety      int
+	alive       bool
 }
 
 func newPlayer() Player {
@@ -35,5 +38,32 @@ func newPlayer() Player {
 			h: 8,
 		},
 		safety: 120,
+		alive:  true,
+	}
+}
+
+func killPlayer(g *Game) {
+	if g.player.alive {
+		explodeBig(g, g.player.x, g.player.y)
+		g.player.alive = false
+	}
+	g.player.lives--
+
+	if g.player.lives > 0 {
+		f := newFunc(g)
+		_ = time.AfterFunc(3*time.Second, f)
+	} else {
+		//goGameOver()
+	}
+
+}
+
+func revivePlayer(g *Game) {
+	g.player = newPlayer()
+}
+
+func newFunc(g *Game) func() {
+	return func() {
+		revivePlayer(g)
 	}
 }
