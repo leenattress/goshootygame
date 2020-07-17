@@ -2,6 +2,8 @@
 
 Using https://ebiten.org/
 
+BGM example music by Chipzel: [Buy her amazing music here](https://chipzel.co.uk/). No copyright breach intended, this is only an example game and is not for sale.
+
 ## Task Runner
 [https://taskfile.dev/#/installation](https://taskfile.dev/#/installation)
 
