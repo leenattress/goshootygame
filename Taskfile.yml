@@ -20,3 +20,9 @@ tasks:
       - go run tools/assets.go
       - file2byteslice -input assets/atlas-1.xml -output src/atlas.go -package main -var packagexml
       - file2byteslice -input assets/atlas-1.png -output src/images.go -package main -var packagepng
+      - file2byteslice -input assets/audio/sfx_weapon_singleshot6.wav -output src/audioShoot.go -package main -var shootSample
+      - file2byteslice -input assets/audio/sfx_exp_cluster5.wav -output src/audioDie.go -package main -var deathSample
+      - file2byteslice -input assets/audio/sfx_exp_short_hard2.wav -output src/audioExplode.go -package main -var explodeSample
+      - file2byteslice -input assets/audio/chipzel-focus.mp3 -output src/audioBGM.go -package main -var bgmSample
+
+

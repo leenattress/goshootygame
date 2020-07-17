@@ -21,6 +21,6 @@ type Bullets struct {
 	num     int
 }
 
-func bulletExists(arr []*Bullet, index int) bool {
-	return (len(arr) > index)
-}
+// func bulletExists(arr []*Bullet, index int) bool {
+// 	return (len(arr) > index)
+// }

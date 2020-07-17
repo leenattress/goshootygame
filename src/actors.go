@@ -51,10 +51,23 @@ func (a *Actors) Update(g *Game) {
 
 // Update an Actor
 func (a *Actor) Update() {
-	//if a.enemyType == 0 {
-	a.vx = float64(math.Sin(float64(a.t / 10)))
-	a.vy = float64(math.Sin(float64(a.t/20) + 80))
-	//}
+	if a.enemyType == 0 {
+		a.vx = float64(math.Sin(float64(a.t / 10)))
+		a.vy = float64(math.Sin(float64(a.t/20) + 80))
+		//a.vy += 0.2
+	}
+
+	if a.enemyType == 1 {
+		a.vx = float64(math.Sin(float64(a.t / 10)))
+		a.vy = float64(math.Sin(float64(a.t/20) + 80))
+		//a.vy += 0.2
+	}
+
+	if a.enemyType == 2 {
+		a.vx = float64(math.Sin(float64(a.t / 10)))
+		a.vy = float64(math.Sin(float64(a.t/20) + 80))
+		//a.vy += 0.2
+	}
 
 	a.x += a.vx
 	a.y += a.vy

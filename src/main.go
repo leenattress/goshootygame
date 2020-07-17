@@ -5,6 +5,9 @@ import (
 	"encoding/xml"
 	"fmt"
 	"github.com/hajimehoshi/ebiten"
+	"github.com/hajimehoshi/ebiten/audio"
+	"github.com/hajimehoshi/ebiten/audio/mp3"
+	"github.com/hajimehoshi/ebiten/audio/wav"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
 	"github.com/hajimehoshi/ebiten/inpututil"
 	"image"
@@ -56,16 +59,29 @@ const (
 	screenWidth  = 240
 	screenHeight = 320
 	maxAngle     = 256
+	sampleRate   = 44100
 )
 
 var (
-	debug       bool = false
-	spriteAtlas *ebiten.Image
-	t           int
+	debug              bool = false
+	spriteAtlas        *ebiten.Image
+	t                  int
+	sfxVolume          float64 = 0.4
+	bgmVolume          float64 = 0.3
+	audioContext       *audio.Context
+	audioShooty        *audio.Player
+	audioDeath         *audio.Player
+	audioPlayerExplode *audio.Player
+	audioExploded      *audio.Player
+	audioMusic         *audio.Player
 )
 
 func init() {
-
+	var err error
+	audioContext, err = audio.NewContext(sampleRate)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // Controls describes the current state of the input
@@ -102,6 +118,8 @@ type Game struct {
 	difficulty     int
 	controls       Controls
 	sprites        map[string]Sprite
+	enemyShoot     int
+	lives          int
 }
 
 func (g *Game) init() {
@@ -109,12 +127,46 @@ func (g *Game) init() {
 		g.inited = true
 	}()
 
+	// get the sprite atlas from code
 	img, _, err := image.Decode(bytes.NewReader(packagepng))
 	spriteAtlas, _ = ebiten.NewImageFromImage(img, ebiten.FilterDefault)
-
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// get a shooty sound
+	audioShootDecoded, err := wav.Decode(audioContext, audio.BytesReadSeekCloser(shootSample))
+	audioShooty, err = audio.NewPlayer(audioContext, audioShootDecoded)
+	audioShooty.SetVolume(sfxVolume - 0.2)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// get a player death sound
+	audioDeathDecoded, err := wav.Decode(audioContext, audio.BytesReadSeekCloser(deathSample))
+	audioDeath, err = audio.NewPlayer(audioContext, audioDeathDecoded)
+	audioDeath.SetVolume(sfxVolume + 0.3)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// get a small explosion sound
+	audioExplodeDecoded, err := wav.Decode(audioContext, audio.BytesReadSeekCloser(explodeSample))
+	audioExploded, err = audio.NewPlayer(audioContext, audioExplodeDecoded)
+	audioExploded.SetVolume(sfxVolume - 0.2)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// get background music
+	audioMusicDecoded, err := mp3.Decode(audioContext, audio.BytesReadSeekCloser(bgmSample))
+	audioMusic, err = audio.NewPlayer(audioContext, audioMusicDecoded)
+	audioMusic.SetVolume(bgmVolume)
+	if err != nil {
+		log.Fatal(err)
+	}
+	audioMusic.Rewind()
+	audioMusic.Play()
 
 	// prepare the sprite atlas in memory
 	buf := bytes.NewBuffer(packagexml)
@@ -162,10 +214,10 @@ func (g *Game) init() {
 
 	g.sprites = m
 
-	// fmt.Println(g.sprites) // this is our sprite atlas data
+	g.enemyShoot = 120 // start our enemies shooting
 
 	g.player = newPlayer()
-	g.player.lives = 3
+	g.lives = 3
 	g.player.safety = 60 * 4
 
 	// create some star particles
@@ -186,6 +238,39 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		g.init()
 	}
 	t++
+
+	if g.enemyShoot == 0 && len(g.actors.actors) > 0 {
+
+		var enemyToShoot = rand.Intn(len(g.actors.actors))
+
+		var spr string = "enemyBullet"
+		g.actors.actors = append(g.actors.actors, &Actor{
+			imageWidth:  g.sprites[spr].width,
+			imageHeight: g.sprites[spr].height,
+			x:           g.actors.actors[enemyToShoot].x, // all these ssquares make a circle
+			y:           g.actors.actors[enemyToShoot].y,
+			vx:          0,
+			vy:          3,
+			angle:       0,
+			enemyType:   5,
+			toDelete:    false,
+			hitbox: Hitbox{
+				x: 0,
+				y: 0,
+				w: float64(g.sprites[spr].width),
+				h: float64(g.sprites[spr].height),
+			},
+		})
+		g.enemyShoot = 60 //rand.Intn(30) + 30 - (g.difficulty * 2)
+		if g.enemyShoot < 10 {
+			g.enemyShoot = 10
+		}
+
+	} else {
+		if g.enemyShoot > 0 {
+			g.enemyShoot--
+		}
+	}
 
 	g.player.vx = 0
 	g.player.vy = 0
@@ -307,6 +392,8 @@ func (g *Game) Update(screen *ebiten.Image) error {
 				},
 			})
 			g.bullets.num = len(g.bullets.bullets)
+			audioShooty.Rewind()
+			audioShooty.Play()
 		}
 	}
 
@@ -335,6 +422,19 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		if g.player.fireRate > 0 {
 			g.player.fireRate--
 		}
+
+		// engine trail
+		g.particles.particles = append(g.particles.particles, &Particle{
+			x:            g.player.x,
+			y:            g.player.y,
+			vx:           0,
+			vy:           0,
+			size:         10,
+			sizev:        -1,
+			particleType: 99,
+			life:         6,
+		})
+
 	}
 	g.actors.Update(g)
 
@@ -343,21 +443,22 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		for j := len(g.actors.actors) - 1; j >= 0; j-- {
 			var a = g.actors.actors[j]
 
-			if collide(
-				a.x+a.hitbox.x,
-				a.y+a.hitbox.y,
-				a.hitbox.w,
-				a.hitbox.h,
-				b.x+b.hitbox.x,
-				b.y+b.hitbox.y,
-				b.hitbox.w,
-				b.hitbox.h,
-			) {
-				g.bullets.bullets[i].toDelete = true
-				g.actors.actors[j].toDelete = true
-				g.score++
-
-				explodeSmall(g, b.x, b.y)
+			if a.enemyType != 5 {
+				if collide(
+					a.x+a.hitbox.x,
+					a.y+a.hitbox.y,
+					a.hitbox.w,
+					a.hitbox.h,
+					b.x+b.hitbox.x,
+					b.y+b.hitbox.y,
+					b.hitbox.w,
+					b.hitbox.h,
+				) {
+					g.bullets.bullets[i].toDelete = true
+					g.actors.actors[j].toDelete = true
+					g.score++
+					explodeSmall(g, b.x, b.y)
+				}
 			}
 		}
 
@@ -377,7 +478,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 						imageWidth:  32,
 						imageHeight: 32,
 						x:           float64(12 + (i * 40)), // all these ssquares make a circle
-						y:           float64(58 + (j * 32)),
+						y:           float64(48 + (j * 32)),
 						vx:          0,
 						vy:          0,
 						angle:       0,
@@ -406,12 +507,22 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	g.bullets.bullets = tempBullets
 
 	var tempActors = make([]*Actor, 0)
+	var atLeastOne bool = false
 	for _, a := range g.actors.actors {
+		if a.y > screenHeight+32 {
+			a.toDelete = true
+		}
 		if !a.toDelete {
 			tempActors = append(tempActors, a)
+		} else {
+			atLeastOne = true
 		}
 	}
 	g.actors.actors = tempActors
+	if atLeastOne {
+		audioExploded.Rewind()
+		audioExploded.Play()
+	}
 
 	var tempParticles = make([]*Particle, 0)
 	for _, x := range g.particles.particles {
@@ -430,7 +541,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	return nil
 }
 
-/** GAME MAIN DRAW */
+// Draw is called every frame to draw the game contents
 func (g *Game) Draw(screen *ebiten.Image) {
 
 	// Draw the current gamepad statua.
@@ -558,6 +669,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			if s.enemyType == 2 {
 				thisEnemy = "enemy3"
 			}
+			if s.enemyType == 5 {
+				thisEnemy = "enemyBullet"
+			}
 			w = g.sprites[thisEnemy].width
 			h = g.sprites[thisEnemy].height
 
@@ -593,7 +707,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			g.op.GeoM.Reset()
 			g.op.GeoM.Scale(1, float64(scale))
 			g.op.GeoM.Translate(float64(s.x), float64(s.y))
-			g.op.ColorM.Translate(0, 0, 0, -(-scale + 1))
+			g.op.ColorM.Translate(0, 0, 0, -(0.5 + (-scale + 1)))
 			if s.vy > 5 {
 				spriteDraw(screen, g, "starFast")
 			} else {
@@ -632,7 +746,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 	}
 
-	for i := 0; i < g.player.lives; i++ {
+	for i := 0; i < g.lives; i++ {
 		g.op.GeoM.Reset()
 		g.op.GeoM.Translate(float64(16+(i*18)), float64(screenHeight-20))
 		spriteDraw(screen, g, "lives")

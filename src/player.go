@@ -44,16 +44,19 @@ func newPlayer() Player {
 
 func killPlayer(g *Game) {
 	if g.player.alive {
-		explodeBig(g, g.player.x, g.player.y)
 		g.player.alive = false
-	}
-	g.player.lives--
+		explodeBig(g, g.player.x, g.player.y)
+		g.lives--
 
-	if g.player.lives > 0 {
-		f := newFunc(g)
-		_ = time.AfterFunc(3*time.Second, f)
-	} else {
-		//goGameOver()
+		audioDeath.Rewind()
+		audioDeath.Play()
+
+		if g.lives > 0 {
+			f := newFunc(g)
+			_ = time.AfterFunc(3*time.Second, f)
+		} else {
+			//goGameOver()
+		}
 	}
 
 }
