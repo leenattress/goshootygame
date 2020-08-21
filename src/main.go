@@ -120,9 +120,11 @@ type Game struct {
 	sprites        map[string]Sprite
 	enemyShoot     int
 	lives          int
+	debug          bool
 }
 
 func (g *Game) init() {
+	g.debug = debug
 	defer func() {
 		g.inited = true
 	}()
@@ -242,25 +244,25 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	if g.enemyShoot == 0 && len(g.actors.actors) > 0 {
 
 		var enemyToShoot = rand.Intn(len(g.actors.actors))
-
-		var spr string = "enemyBullet"
-		g.actors.actors = append(g.actors.actors, &Actor{
-			imageWidth:  g.sprites[spr].width,
-			imageHeight: g.sprites[spr].height,
-			x:           g.actors.actors[enemyToShoot].x, // all these ssquares make a circle
+		var actorSprite string = "enemyBullet"
+		g.actors.Create(Actor{
+			group:       "enemyBullet",
+			imageWidth:  g.sprites[actorSprite].width,
+			imageHeight: g.sprites[actorSprite].height,
+			x:           g.actors.actors[enemyToShoot].x, // all these squares make a circle
 			y:           g.actors.actors[enemyToShoot].y,
 			vx:          0,
 			vy:          3,
-			angle:       0,
-			enemyType:   5,
-			toDelete:    false,
+			actorType:   "bullet",
+			sprite:      actorSprite,
 			hitbox: Hitbox{
 				x: 0,
 				y: 0,
-				w: float64(g.sprites[spr].width),
-				h: float64(g.sprites[spr].height),
+				w: float64(g.sprites[actorSprite].width),
+				h: float64(g.sprites[actorSprite].height),
 			},
 		})
+
 		g.enemyShoot = 60 //rand.Intn(30) + 30 - (g.difficulty * 2)
 		if g.enemyShoot < 10 {
 			g.enemyShoot = 10
@@ -436,14 +438,32 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		})
 
 	}
-	g.actors.Update(g)
+
+	// Update the vectors
+	for i := len(g.actors.actors) - 1; i >= 0; i-- {
+		var a = g.actors.actors[i]
+		if a.group == "enemy" {
+			var vx = float64(math.Sin(float64(a.t / 10)))
+			var vy = float64(math.Sin(float64(a.t/20) + 80))
+			if a.actorType == "enemy1" || a.actorType == "enemy2" || a.actorType == "enemy3" {
+				a.SetVectors(vx, vy)
+			}
+
+		}
+		if a.group == "enemyBullet" {
+			if a.y > screenHeight {
+				a.Kill()
+			}
+		}
+	}
+	g.actors.Update()
 
 	for i := len(g.bullets.bullets) - 1; i >= 0; i-- {
 		var b = g.bullets.bullets[i]
 		for j := len(g.actors.actors) - 1; j >= 0; j-- {
 			var a = g.actors.actors[j]
 
-			if a.enemyType != 5 {
+			if a.actorType != "5" {
 				if collide(
 					a.x+a.hitbox.x,
 					a.y+a.hitbox.y,
@@ -455,7 +475,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 					b.hitbox.h,
 				) {
 					g.bullets.bullets[i].toDelete = true
-					g.actors.actors[j].toDelete = true
+					g.actors.actors[j].Kill()
 					g.score++
 					explodeSmall(g, b.x, b.y)
 				}
@@ -474,16 +494,14 @@ func (g *Game) Update(screen *ebiten.Image) error {
 			var thisWave int = rand.Intn(3)
 			for i := 0; i < 5; i++ {
 				for j := 0; j < 4; j++ {
-					g.actors.actors = append(g.actors.actors, &Actor{
+					g.actors.Create(Actor{
+						group:       "enemy",
+						actorType:   "enemy" + strconv.Itoa(thisWave),
+						sprite:      "enemy" + strconv.Itoa(thisWave),
 						imageWidth:  32,
 						imageHeight: 32,
-						x:           float64(12 + (i * 40)), // all these ssquares make a circle
+						x:           float64(12 + (i * 40)), // all these squares make a circle
 						y:           float64(48 + (j * 32)),
-						vx:          0,
-						vy:          0,
-						angle:       0,
-						enemyType:   thisWave,
-						toDelete:    false,
 						t:           (i + j) * 3, // by starting the timer offset like this we get a pleasant wiggly formation
 						hitbox: Hitbox{
 							x: 4,
@@ -506,20 +524,8 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	}
 	g.bullets.bullets = tempBullets
 
-	var tempActors = make([]*Actor, 0)
-	var atLeastOne bool = false
-	for _, a := range g.actors.actors {
-		if a.y > screenHeight+32 {
-			a.toDelete = true
-		}
-		if !a.toDelete {
-			tempActors = append(tempActors, a)
-		} else {
-			atLeastOne = true
-		}
-	}
-	g.actors.actors = tempActors
-	if atLeastOne {
+	var deletedAny = g.actors.Clean()
+	if deletedAny {
 		audioExploded.Rewind()
 		audioExploded.Play()
 	}
@@ -531,8 +537,16 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		}
 	}
 	g.particles.particles = tempParticles
-
 	g.particles.Update()
+
+	// Does the player collide with any enemy?
+	if g.actors.CollidesHitbox(g.player.x, g.player.y, g.player.hitbox, "enemy") && g.player.safety <= 0 {
+		g.player.toDelete = true
+	}
+	// Does the player collide with any enemy bullets??
+	if g.actors.CollidesHitbox(g.player.x, g.player.y, g.player.hitbox, "enemyBullet") && g.player.safety <= 0 {
+		g.player.toDelete = true
+	}
 
 	if g.player.toDelete {
 		killPlayer(g)
@@ -628,6 +642,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	}
 
+	g.actors.DrawGroup(g, screen, "enemy")
+	g.actors.DrawGroup(g, screen, "enemyBullet")
+
 	w, h := g.sprites["bullet"].width, g.sprites["bullet"].height
 	for i := 0; i < len(g.bullets.bullets); i++ {
 		if !g.bullets.bullets[i].toDelete {
@@ -649,52 +666,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 					color.NRGBA{0xff, 0x00, 0x00, 0x77},
 				)
 			}
-		}
-	}
-
-	for i := 0; i < len(g.actors.actors); i++ {
-		if !g.actors.actors[i].toDelete {
-			s := g.actors.actors[i]
-
-			var thisEnemy string
-			//var thisImg *ebiten.Image
-			var w, h int
-
-			if s.enemyType == 0 {
-				thisEnemy = "enemy1"
-			}
-			if s.enemyType == 1 {
-				thisEnemy = "enemy2"
-			}
-			if s.enemyType == 2 {
-				thisEnemy = "enemy3"
-			}
-			if s.enemyType == 5 {
-				thisEnemy = "enemyBullet"
-			}
-			w = g.sprites[thisEnemy].width
-			h = g.sprites[thisEnemy].height
-
-			g.op.GeoM.Reset()
-			g.op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
-			//g.op.GeoM.Rotate(2 * math.Pi * float64(s.angle) / maxAngle)
-			g.op.GeoM.Translate(float64(w)/2, float64(h)/2)
-			g.op.GeoM.Translate(float64(s.x), float64(s.y))
-			//screen.DrawImage(thisImg, &g.op)
-			spriteDraw(screen, g, thisEnemy)
-
-			if debug {
-				ebitenutil.DrawRect(
-					screen,
-					float64(s.x+s.hitbox.x),
-					float64(s.y+s.hitbox.y),
-					float64(s.hitbox.w),
-					float64(s.hitbox.h),
-					color.NRGBA{0xff, 0x00, 0x00, 0x77},
-				)
-			}
-
-			ebitenutil.DebugPrint(screen, str)
 		}
 	}
 
